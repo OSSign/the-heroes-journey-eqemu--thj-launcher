@@ -38,10 +38,11 @@ jobs:
         shell: pwsh
         run: |
           (Get-Content -Path .\Helpers\SteamHelper.cs).replace('github.com/The-Heroes-Journey-EQEMU/thj-patcher', 'github.com/ossign/the-heroes-journey-eqemu--thj-patcher') | Set-Content -Path .\Helpers\SteamHelper.cs
-          (Get-Content -Path .\THJPatcher.csproj).replace('</Version>', @"</Version>
-              <PublishSingleFile>true</PublishSingleFile>
-              <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-              <PublishTrimmed>true</PublishTrimmed>
+          (Get-Content -Path .\THJPatcher.csproj).replace('</Version>', @"
+          </Version>
+          <PublishSingleFile>true</PublishSingleFile>
+          <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+          <PublishTrimmed>true</PublishTrimmed>
           ") | Set-Content -Path .\THJPatcher.csproj
 
       - name: Restore and build
