@@ -12,6 +12,9 @@ on:
           - main
           - master
         required: true
+  push:
+    branches: 
+      - ossign
 
 jobs:
   build:
@@ -43,7 +46,7 @@ jobs:
           <PublishSingleFile>true</PublishSingleFile>
           <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
           <PublishTrimmed>true</PublishTrimmed>
-          ") | Set-Content -Path .\THJPatcher.csproj
+          "@) | Set-Content -Path .\THJPatcher.csproj
 
       - name: Restore and build
         run: |
