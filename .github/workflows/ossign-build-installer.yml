@@ -37,22 +37,63 @@ jobs:
         run: |
           Out-File -FilePath $env:GITHUB_ENV -Append -InputObject "VERSION=$($([xml]$(Get-Content .\THJPatcher.csproj)).Project.PropertyGroup.Version)"
       
-      - name: Replace URL to signed patcher
+      - name: Replace URL to signed patcher and add options for single-file installer creation
         shell: pwsh
         run: |
-          (Get-Content -Path .\Helpers\SteamHelper.cs).replace('github.com/The-Heroes-Journey-EQEMU/thj-patcher', 'github.com/ossign/the-heroes-journey-eqemu--thj-patcher') | Set-Content -Path .\Helpers\SteamHelper.cs
-          (Get-Content -Path .\THJPatcher.csproj).replace('</Version>', @"
+          (Get-Content -Path .\Helpers\SteamHelper.cs).
+          replace('github.com/The-Heroes-Journey-EQEMU/thj-patcher', 'github.com/ossign/the-heroes-journey-eqemu--thj-patcher') | 
+          Set-Content -Path .\Helpers\SteamHelper.cs
+          
+          (Get-Content -Path .\THJPatcher.csproj).
+          replace('</Version>', @"
           </Version>
-          <PublishSingleFile>true</PublishSingleFile>
-          <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-          <PublishTrimmed>true</PublishTrimmed>
-          "@) | Set-Content -Path .\THJPatcher.csproj
+              <PublishSingleFile>true</PublishSingleFile>
+              <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+              <DebugType>embedded</DebugType>
+          "@).
+          replace('<None Update="steam_appid.txt">', '<None Update="steam_appid.txt" Pack="true" PackagePath="/">') | 
+          Set-Content -Path .\THJPatcher.csproj
 
       - name: Restore and build
         run: |
-          dotnet restore
-          dotnet build -c Release -r win-x64 --self-contained true -o dist
-          if (-not (Test-Path -Path dist\*.exe) -and (-not (Test-Path -Path dist\*.msi))) { throw "No compiled file found in output directory!" }
+          dotnet build -c Release -o build
+          if (-not (Test-Path -Path build\*.exe)) { throw "No compiled file found in output directory!" }
+      
+      - name: Sign DLLs and executables
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.ATS_TENANT_ID }}
+          azure-client-id: ${{ secrets.ATS_TEST_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.ATS_TEST_CLIENT_SECRET }}
+          endpoint: ${{ secrets.ATS_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.ATS_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.ATS_TEST_PROFILE_NAME }}
+          files-folder: ./build
+          files-folder-filter: exe,dll
+          file-digest: ${{ vars.ATS_DIGEST }}
+          timestamp-rfc3161: ${{ vars.ATS_TIMESTAMP }}
+          timestamp-digest: ${{ vars.ATS_DIGEST }}
+          description-url: ${{ vars.ATS_DESCRIPTION_URL }}
+      
+      - name: Create installer
+        shell: pwsh
+        run: dotnet publish -c Release -o dist --no-build
+      
+      - name: Sign DLLs and executables
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.ATS_TENANT_ID }}
+          azure-client-id: ${{ secrets.ATS_TEST_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.ATS_TEST_CLIENT_SECRET }}
+          endpoint: ${{ secrets.ATS_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.ATS_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.ATS_TEST_PROFILE_NAME }}
+          files-folder: ./dist
+          files-folder-filter: exe
+          file-digest: ${{ vars.ATS_DIGEST }}
+          timestamp-rfc3161: ${{ vars.ATS_TIMESTAMP }}
+          timestamp-digest: ${{ vars.ATS_DIGEST }}
+          description-url: ${{ vars.ATS_DESCRIPTION_URL }}
 
       - name: Create Release
         id: create_release
@@ -60,7 +101,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           name: Release v${{ env.VERSION }}
-          files: dist/*
+          files: dist/*.exe
           draft: true
           prerelease: false
         env:
