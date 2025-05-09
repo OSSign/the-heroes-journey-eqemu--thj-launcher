@@ -1,0 +1,63 @@
+name: Build and Package THJInstaller
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        default: ossign
+        type: choice
+        description: The branch to build from
+        options:
+          - ossign
+          - main
+          - master
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+          
+      - name: Get version from .csproj
+        id: get_version
+        shell: pwsh
+        run: |
+          Out-File -FilePath $env:GITHUB_ENV -Append -InputObject "VERSION=$($([xml]$(Get-Content .\THJPatcher.csproj)).Project.PropertyGroup.Version)"
+      
+      - name: Replace URL to signed patcher
+        shell: pwsh
+        run: |
+          (Get-Content -Path .\Helpers\SteamHelper.cs).replace('github.com/The-Heroes-Journey-EQEMU/thj-patcher', 'github.com/ossign/the-heroes-journey-eqemu--thj-patcher') | Set-Content -Path .\Helpers\SteamHelper.cs
+          (Get-Content -Path .\THJPatcher.csproj).replace('</Version>', @"</Version>
+              <PublishSingleFile>true</PublishSingleFile>
+              <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+              <PublishTrimmed>true</PublishTrimmed>
+          ") | Set-Content -Path .\THJPatcher.csproj
+
+      - name: Restore and build
+        run: |
+          dotnet restore
+          dotnet build -c Release -r win-x64 --self-contained true -o dist
+          if (-not (Test-Path -Path dist\*.exe) -and (-not (Test-Path -Path dist\*.msi))) { throw "No compiled file found in output directory!" }
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Release v${{ env.VERSION }}
+          files: dist/*
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
